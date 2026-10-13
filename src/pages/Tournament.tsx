@@ -8,11 +8,14 @@ import PushNotificationSettings from "@/components/PushNotificationSettings";
 import MobileNavigation from "@/components/MobileNavigation";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { Loader2 } from "lucide-react";
+import { Loader2, Filter } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const Tournament = () => {
   const [currentSection, setCurrentSection] = useState("partidos");
   const [matches, setMatches] = useState([]);
+  const [categoryFilter, setCategoryFilter] = useState("todas");
+  const [campoFilter, setCampoFilter] = useState("todos");
   const { loading: authLoading, isAdmin } = useAuth();
 
   const loadMatches = async () => {
@@ -56,6 +59,15 @@ const Tournament = () => {
     loadMatches();
   };
 
+  const uniqueCategories = Array.from(new Set(matches.map((m) => m.categoria).filter(Boolean)));
+  const uniqueCampos = Array.from(new Set(matches.map((m) => m.campo).filter(Boolean)));
+
+  const filteredMatches = matches.filter((match) => {
+    const matchesCategory = categoryFilter === "todas" || match.categoria === categoryFilter;
+    const matchesCampo = campoFilter === "todos" || match.campo === campoFilter;
+    return matchesCategory && matchesCampo;
+  });
+
   if (authLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -80,14 +92,41 @@ const Tournament = () => {
               <p className="text-sm text-muted-foreground">Solicita partidos disponibles</p>
             </div>
 
+            {/* Filtros */}
+            <div className="flex items-center gap-2 mb-4">
+              <Filter className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                <SelectTrigger className="w-full sm:w-44">
+                  <SelectValue placeholder="Categoría" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todas">Todas las categorías</SelectItem>
+                  {uniqueCategories.map((cat: string) => (
+                    <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={campoFilter} onValueChange={setCampoFilter}>
+                <SelectTrigger className="w-full sm:w-44">
+                  <SelectValue placeholder="Campo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos los campos</SelectItem>
+                  {uniqueCampos.map((campo: string) => (
+                    <SelectItem key={campo} value={campo}>{campo}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             {/* Matches Grid */}
             <div className="grid grid-cols-1 gap-4">
-              {matches.length === 0 ? (
+              {filteredMatches.length === 0 ? (
                 <div className="col-span-full text-center py-12">
                   <p className="text-muted-foreground">No hay partidos disponibles</p>
                 </div>
               ) : (
-                matches.map((match) => (
+                filteredMatches.map((match) => (
                   <MatchCard
                     key={match.id}
                     match={match}

@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { Shield, Users, Calendar, Check, X, Trash2, RotateCcw, Plus, UsersIcon, Download, FileText, LogIn, Bell } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Shield, Users, Calendar, Check, X, Trash2, RotateCcw, Plus, UsersIcon, Download, FileText, LogIn, Bell, Pencil, Upload } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,10 +8,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import AddMatchForm from "./AddMatchForm";
+import EditMatchForm from "./EditMatchForm";
 import SendNotificationPanel from "./SendNotificationPanel";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { parseCSV } from "@/lib/csv";
 
 interface AdminSectionProps {
   onAddMatch: () => void;
@@ -30,6 +32,9 @@ const AdminSection = ({ onAddMatch }: AdminSectionProps) => {
     categoria: "",
     entrenador: ""
   });
+  const [editingMatch, setEditingMatch] = useState<any>(null);
+  const teamsFileInputRef = useRef<HTMLInputElement>(null);
+  const matchesFileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -240,6 +245,110 @@ const AdminSection = ({ onAddMatch }: AdminSectionProps) => {
         title: "Error",
         description: "No se pudo eliminar el partido",
         variant: "destructive"
+      });
+    }
+  };
+
+  const handleImportTeams = async (file: File) => {
+    try {
+      const text = await file.text();
+      const rows = parseCSV(text);
+
+      if (rows.length === 0) {
+        toast({
+          title: "Error",
+          description: "El archivo no contiene filas válidas",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const toInsert = rows
+        .filter((r) => r.name && r.categoria)
+        .map((r) => ({
+          name: r.name,
+          categoria: r.categoria,
+          entrenador: r.entrenador || null,
+          confirmed: false,
+        }));
+
+      if (toInsert.length === 0) {
+        toast({
+          title: "Error",
+          description: "No se encontraron equipos válidos (columnas requeridas: name, categoria)",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const { error } = await supabase.from('equipos').insert(toInsert);
+      if (error) throw error;
+
+      toast({
+        title: "Importación exitosa",
+        description: `Se importaron ${toInsert.length} equipos`,
+      });
+      loadAdminData();
+    } catch (error) {
+      console.error('Error importing teams:', error);
+      toast({
+        title: "Error",
+        description: "No se pudieron importar los equipos",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleImportMatches = async (file: File) => {
+    try {
+      const text = await file.text();
+      const rows = parseCSV(text);
+
+      if (rows.length === 0) {
+        toast({
+          title: "Error",
+          description: "El archivo no contiene filas válidas",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const toInsert = rows
+        .filter((r) => r.fecha && r.hora && r.campo && r.escuela && r.entrenador && r.duracion && r.categoria)
+        .map((r) => ({
+          fecha: r.fecha,
+          hora: r.hora,
+          campo: r.campo,
+          escuela: r.escuela,
+          entrenador: r.entrenador,
+          duracion: r.duracion,
+          categoria: r.categoria,
+        }));
+
+      if (toInsert.length === 0) {
+        toast({
+          title: "Error",
+          description: "No se encontraron partidos válidos (columnas: fecha, hora, campo, escuela, entrenador, duracion, categoria)",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const { error } = await supabase.from('partidos').insert(toInsert);
+      if (error) throw error;
+
+      toast({
+        title: "Importación exitosa",
+        description: `Se importaron ${toInsert.length} partidos`,
+      });
+      loadAdminData();
+      onAddMatch();
+    } catch (error) {
+      console.error('Error importing matches:', error);
+      toast({
+        title: "Error",
+        description: "No se pudieron importar los partidos",
+        variant: "destructive",
       });
     }
   };
@@ -464,9 +573,31 @@ const AdminSection = ({ onAddMatch }: AdminSectionProps) => {
                 <div className="space-y-6">
                   <AddMatchForm onAddMatch={onAddMatch} />
                   
-                  {/* Lista de partidos existentes */}
-                  <div className="bg-white rounded-lg p-3 sm:p-4 text-foreground">
-                    <h3 className="text-base sm:text-lg font-semibold mb-4">Partidos Creados ({matches.length})</h3>
+                   {/* Lista de partidos existentes */}
+                   <div className="bg-white rounded-lg p-3 sm:p-4 text-foreground">
+                     <div className="flex items-center justify-between gap-2 mb-4">
+                       <h3 className="text-base sm:text-lg font-semibold">Partidos Creados ({matches.length})</h3>
+                       <Button
+                         onClick={() => matchesFileInputRef.current?.click()}
+                         variant="outline"
+                         size="sm"
+                         className="flex items-center gap-2 text-xs sm:text-sm"
+                       >
+                         <Upload className="h-3 w-3 sm:h-4 sm:w-4" />
+                         Importar CSV
+                       </Button>
+                     </div>
+                     <input
+                       ref={matchesFileInputRef}
+                       type="file"
+                       accept=".csv,text/csv"
+                       className="hidden"
+                       onChange={(e) => {
+                         const file = e.target.files?.[0];
+                         if (file) handleImportMatches(file);
+                         e.target.value = "";
+                       }}
+                     />
                     {matches.length === 0 ? (
                       <p className="text-muted-foreground text-center py-8 text-sm">No hay partidos creados</p>
                     ) : (
@@ -485,7 +616,15 @@ const AdminSection = ({ onAddMatch }: AdminSectionProps) => {
                                   <div className="truncate"><strong>Duración:</strong> {match.duracion}</div>
                                 </div>
                               </div>
-                              <div className="flex justify-end">
+                              <div className="flex justify-end gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="min-w-[36px]"
+                                  onClick={() => setEditingMatch(match)}
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
                                 <Button
                                   size="sm"
                                   variant="destructive"
@@ -509,6 +648,16 @@ const AdminSection = ({ onAddMatch }: AdminSectionProps) => {
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
                     <h3 className="text-base sm:text-lg font-semibold">Equipos del Torneo ({teams.length})</h3>
                     <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        onClick={() => teamsFileInputRef.current?.click()}
+                        variant="outline"
+                        size="sm"
+                        className="flex items-center gap-2 text-xs sm:text-sm"
+                      >
+                        <Upload className="h-3 w-3 sm:h-4 sm:w-4" />
+                        Importar CSV
+                      </Button>
+
                       <Button
                         onClick={exportConfirmedTeams}
                         variant="outline"
@@ -542,6 +691,17 @@ const AdminSection = ({ onAddMatch }: AdminSectionProps) => {
                   </div>
 
                   {/* Formulario para añadir equipo */}
+                  <input
+                    ref={teamsFileInputRef}
+                    type="file"
+                    accept=".csv,text/csv"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleImportTeams(file);
+                      e.target.value = "";
+                    }}
+                  />
                   <div className="bg-muted/50 p-3 sm:p-4 rounded-lg mb-6">
                     <h4 className="font-semibold mb-3 flex items-center text-sm sm:text-base">
                       <Plus className="h-4 w-4 mr-2" />
@@ -784,6 +944,18 @@ const AdminSection = ({ onAddMatch }: AdminSectionProps) => {
           </div>
         </CardContent>
       </Card>
+
+      <EditMatchForm
+        match={editingMatch}
+        open={!!editingMatch}
+        onOpenChange={(open) => {
+          if (!open) setEditingMatch(null);
+        }}
+        onSaved={() => {
+          loadAdminData();
+          onAddMatch();
+        }}
+      />
     </div>
   );
 };

@@ -70,17 +70,29 @@ const MatchConfirmationSection = () => {
     const duracionPartido = halfMatchSelection[teamId] ? 'medio' : 'completo';
 
     try {
-      // Actualizar en la base de datos
-      const { error } = await (supabase as any)
+      // Actualizar en la base de datos solo si aún no estaba confirmado (evita sobrescritura)
+      const { data: updated, error } = await (supabase as any)
         .from('equipos')
         .update({ 
           confirmed: true, 
           entrenador: trainerName,
           duracion_partido: duracionPartido
         })
-        .eq('id', teamId);
+        .eq('id', teamId)
+        .eq('confirmed', false)
+        .select();
 
       if (error) throw error;
+
+      if (!updated || updated.length === 0) {
+        toast({
+          title: "Ya confirmado",
+          description: "Este equipo ya fue confirmado por otro entrenador. Recargando...",
+          variant: "destructive",
+        });
+        fetchTeams();
+        return;
+      }
 
       // Actualizar el estado local
       setTeams(prev => prev.map(team => 
