@@ -192,7 +192,12 @@ const AdminSection = ({ onAddMatch }: AdminSectionProps) => {
     try {
       const { error } = await supabase
         .from('equipos')
-        .update({ confirmed: false })
+        .update({ 
+          confirmed: false,
+          entrenador: null,
+          segundo_entrenador: null,
+          duracion_partido: 'completo'
+        })
         .neq('id', 0); // Update all records
 
       if (error) throw error;
